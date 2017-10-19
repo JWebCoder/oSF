@@ -9,15 +9,25 @@ export type DBParams = {
 
 export type DBQuery = {
   include_docs: boolean,
-  attachments: boolean,
-  limit: number,
+  attachments?: boolean,
+  limit?: number,
   startkey: string,
   endkey: string
 }
 
 export type DBItem = {
   _id: string,
-  _rev: string
+  _rev: string,
+  doc?: {},
+  '@@FW_META@@'?: {},
+  remote?: {
+    Id: string,
+    type: string
+  },
+  original?: {
+    Id: string,
+    type: string
+  }
 }
 
 export type DBResponse = {

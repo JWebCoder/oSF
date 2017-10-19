@@ -5,32 +5,13 @@ export type User = {
   instance_url: string
 }
 
-export type Auth = {
-  getUser: () => User,
-  isLoggedIn: () => {},
-  logout: () => {},
-  login: () => {},
-  storeUser: () => {},
-  headers: () => {}
-}
-
-export type Config = {
-  timeout: number,
-  remoteConfigObject: string,
-  clientId: string,
-  clientSecret: string,
-  baseLoginUrl: string,
-  SFAPIVersion: string,
-  proxyUrl?: string,
-  authAdapter?: (config: Config, loginUrl: string) => mixed
-}
-
-export type SFConfig = {
-  auth: Auth,
-  routes: Routes,
-  baseUrl: string,
-  proxyUrl: string,
-  headers: {}
+export interface AuthAdapter {
+  isLoggedIn(): string,
+  logout(cb: () => mixed): mixed,
+  login(username: string, password: string): mixed,
+  storeUser(response: {data: {}}, cb?: () => mixed): mixed,
+  headers: Headers,
+  getUser(): User | void
 }
 
 export type Routes = {
@@ -45,6 +26,27 @@ export type Routes = {
   layout: string,
   loginUrl: string,
   syncConfigPath: string
+}
+
+export type Config = {
+  timeout: number,
+  remoteConfigObject: string,
+  clientId: string,
+  clientSecret: string,
+  baseLoginUrl: string,
+  SFAPIVersion: string,
+  proxyUrl?: string,
+  baseUrl: string,
+  routes?: Routes,
+  authAdapter?: (config: Config, loginUrl: string) => AuthAdapter
+}
+
+export type SFConfig = {
+  auth: AuthAdapter,
+  routes: Routes,
+  baseUrl: string,
+  proxyUrl: string,
+  headers: {}
 }
 
 export type RequestObject = {

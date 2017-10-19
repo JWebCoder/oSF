@@ -1,70 +1,69 @@
 // @flow
 
 import errors from 'errors'
-import _ from 'lodash'
 import axios from 'axios'
 
 import type {SFConfig, RequestObject, AxiosError, AxiosResponse, User, AxiosErrorResponse} from 'types'
 
-export default class SFAPI {
+export default class SFapi {
   options: SFConfig
-  constructor(options: SFConfig) {
+  constructor (options: SFConfig) {
     this.options = options
   }
 
-  request(obj: RequestObject): Promise<any> {
+  request (obj: RequestObject): Promise<any> {
     return new Promise(
       (resolve, reject) => {
-        this.options.auth.isLoggedIn()?
-          resolve(this.options.auth.getUser())
-          :
-          reject('No access token. Login and try again.')
+        this.options.auth.isLoggedIn()
+          ? resolve(this.options.auth.getUser())
+          : reject(new Error('No access token. Login and try again.'))
       }
-    )
-    .then(
-      (user: User): Promise<any> => {
-        const method: string = obj.method ? obj.method.toLowerCase() : 'get'
-        const headers = new Headers({
-          ...this.options.headers,
-          'Content-Type': obj.contentType || 'application/json',
-          'Authorization': 'Bearer ' + user.access_token
-        })
+    ).then(
+      (user: User | void): Promise<any> => {
+        if (user) {
+          const method: string = obj.method ? obj.method.toLowerCase() : 'get'
+          const headers: Headers = new Headers({
+            ...this.options.headers,
+            'Content-Type': obj.contentType || 'application/json',
+            'Authorization': 'Bearer ' + user.access_token
+          })
 
-        if (this.options.proxyUrl) {
-          headers.append('target-base-url', this.options.baseUrl || user.instance_url)
+          if (this.options.proxyUrl) {
+            headers.append('target-base-url', this.options.baseUrl || user.instance_url)
+          }
+
+          const baseUrl = this.options.proxyUrl || this.options.baseUrl || user.instance_url
+
+          // dev friendly API: Add leading '/' if missing so url + path concat always works
+          if (obj.path.charAt(0) !== '/') {
+            obj.path = `/${obj.path}`
+          }
+
+          let query: string = ''
+
+          if (obj.params) {
+            query = '?' + Object.keys(obj.params)
+              .map(
+                (k: string) => `${encodeURIComponent(k)}=${encodeURIComponent(obj.params ? obj.params[k]: '')}`
+              )
+              .join('&')
+          }
+
+          return axios({
+            method,
+            headers,
+            url: baseUrl + obj.path + query,
+            data: obj.data
+          })
+        } else {
+          throw new Error('Not logged in')
         }
-
-        const baseUrl = this.options.proxyUrl || this.options.baseUrl || user.instance_url
-
-        // dev friendly API: Add leading '/' if missing so url + path concat always works
-        if (obj.path.charAt(0) !== '/') {
-          obj.path = `/${obj.path}`
-        }
-
-        let query: string = ''
-
-        if (obj.params) {
-          query = '?' + Object.keys(obj.params)
-            .map(
-              (k: string) => `${encodeURIComponent(k)}=${encodeURIComponent(obj.params ? obj.params[k]: '')}`
-            )
-            .join('&');
-        }
-
-        return axios({
-          method,
-          headers,
-          url: baseUrl + obj.path + query,
-          data: obj.data
-        })
       }
-    )
-    .then(
+    ).then(
       (response: AxiosResponse): {} => {
         return response.data
       }
-    )
-    .catch(
+    ).catch(
       (error: AxiosError) => {
         if (error.response) {
           let err: AxiosErrorResponse = error.response
@@ -95,8 +94,7 @@ export default class SFAPI {
       params: {
         q: soql
       }
-    })
-    .catch(
+    }).catch(
       (err: AxiosError) => {
         throw err
       }
@@ -126,15 +124,14 @@ export default class SFAPI {
         '_HttpMethod': 'POST'
       },
       data: fields
-    })
-    .catch(
+    }).catch(
       (err: AxiosError) => {
         throw err
       }
     )
   }
 
-  update (objectName: string, id: string, data: {'@@FW_META@@': {fieldsNotToPush: []}}): Promise<any>  {
+  update (objectName: string, id: string, data: {'@@FW_META@@': {fieldsNotToPush: []}}): Promise<any> {
     var fields: {} = this.removeforbiddenFields(data)
     var reqConfig: RequestObject = {
       method: 'patch',
@@ -142,8 +139,7 @@ export default class SFAPI {
       path: this.options.routes.update + objectName + '/' + id,
       data: fields
     }
-    return this.request(reqConfig)
-    .catch(
+    return this.request(reqConfig).catch(
       (err: AxiosError) => {
         throw err
       }
@@ -159,8 +155,7 @@ export default class SFAPI {
         '_HttpMethod': 'DELETE'
       }
     }
-    return this.request(reqConfig)
-    .catch(
+    return this.request(reqConfig).catch(
       (err: AxiosError) => {
         throw err
       }
@@ -168,8 +163,7 @@ export default class SFAPI {
   }
 
   get (obj: RequestObject): Promise<any> {
-    return this.request(obj)
-    .catch(
+    return this.request(obj).catch(
       (err: AxiosError) => {
         throw err
       }
@@ -178,8 +172,7 @@ export default class SFAPI {
 
   post (obj: RequestObject): Promise<any> {
     obj.method = 'POST'
-    return this.request(obj)
-    .catch(
+    return this.request(obj).catch(
       (err: AxiosError) => {
         throw err
       }

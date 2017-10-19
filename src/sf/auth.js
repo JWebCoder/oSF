@@ -1,12 +1,16 @@
+/* global localStorage */
+// @flow
 import axios from 'axios'
 
-import type {Config, SFLoginParams, AxiosResponse, AxiosError, AxiosErrorResponse} from 'types'
+import type {Config, SFLoginParams, AxiosError, AxiosErrorResponse, User, AuthAdapter} from 'types'
+import type {$AxiosXHR} from 'axios'
 
-class AuthAdapter {
-  header: Headers
+class Auth implements AuthAdapter {
+  headers: Headers
   config: Config
+  loginUrl: string
 
-  contructor(config: Config, loginUrl: string) {
+  constructor (config: Config, loginUrl: string) {
     this.headers = new Headers({
       'Content-Type': 'application/x-www-form-urlencoded'
     })
@@ -16,24 +20,24 @@ class AuthAdapter {
     }
 
     this.config = config
-
+    this.loginUrl = loginUrl
   }
 
-  getUser(): {} | boolean {
-    const data: string = localStorage.getItem('auth')
-    return data ? JSON.parse(data) : false
+  getUser (): User | void {
+    const data: string = localStorage.getItem('auth') || ''
+    return data ? JSON.parse(data) : undefined
   }
 
-  isLoggedIn(): string {
-    return localStorage.getItem('auth')
+  isLoggedIn (): string {
+    return localStorage.getItem('auth') || ''
   }
 
-  logout(callback: () => mixed) {
+  logout (callback: () => mixed) {
     localStorage.removeItem('auth')
     if (callback) callback()
   }
 
-  login(username: string, password: string): Promise<any> {
+  login (username: string, password: string): Promise<any> {
     const params: SFLoginParams = {
       client_id: this.config.clientId,
       client_secret: this.config.clientSecret,
@@ -42,18 +46,16 @@ class AuthAdapter {
       grant_type: 'password'
     }
 
-    axios({
+    return axios({
       method: 'post',
-      url: loginUrl,
+      url: this.loginUrl,
       data: params,
       headers: this.headers
-    })
-    .then(
-      (response: AxiosResponse): {} => {
+    }).then(
+      (response: $AxiosXHR<SFLoginParams>): {} => {
         return response.data
       }
-    )
-    .catch(
+    ).catch(
       (error: AxiosError) => {
         if (error.response) {
           let err: AxiosErrorResponse = error.response
@@ -82,3 +84,5 @@ class AuthAdapter {
     if (cb) cb()
   }
 }
+
+export default Auth

@@ -1,12 +1,14 @@
-import routes from 'sf/routes'
-import SFAPI from 'sf/api'
-import auth from 'sf/auth'
-import db from 'db'
+// @flow
 
-import type {Config, Routes} from 'types'
+import routes from 'sf/routes'
+import SFapi from 'sf/api'
+import Auth from 'sf/auth'
+import db from 'db'
+import dbDriver from 'DBDriver'
+
+import type {Config, Routes, AuthAdapter} from 'types'
 
 var sync = require('./sync')
-var pouchDbDriver = require('./pouchDbDriver')
 
 var langAdapter = require('./langAdapter')
 var pkg = require('../package.json')
@@ -19,25 +21,24 @@ var store = redux.createStore(reducer)
 export function create (config: Config) {
   const routesConfig: Routes = config.routes ? config.routes : routes(config)
 
-  const auth = config.authAdapter
+  const auth: AuthAdapter = config.authAdapter
     ? config.authAdapter(config, routesConfig.loginUrl)
-    : auth(config, routesConfig.loginUrl)
+    : new Auth(config, routesConfig.loginUrl)
 
-  const sfApi: typeof SFAPI = new SFAPI({
+  const sfApi: SFapi = new SFapi({
     auth: auth,
     routes: _.extend({}, routesConfig, config.routes || {}),
     baseUrl: config.baseUrl,
-    proxyUrl: config.proxyUrl,
+    proxyUrl: config.proxyUrl || '',
     headers: auth.headers
   })
   const lang = langAdapter(sfApi)
-  const localApi = pouchDbDriver()
 
   const options = {
     api: {
       sf: sfApi
     },
-    localApi: localApi,
+    localApi: dbDriver,
     remoteConfigObject: config.remoteConfigObject,
     routes: routes,
     auth: auth,
@@ -52,23 +53,23 @@ export function create (config: Config) {
   // leaving the rest as an impl-detail
   return {
     // Operations performed on the local DB
-    search: localApi.search,
-    query: localApi.query,
-    allDocs: localApi.allDocs,
-    bulkDocs: localApi.bulkDocs,
-    getById: localApi.getById,
-    create: localApi.create,
-    createAttachment: localApi.createAttachment,
-    update: localApi.update,
-    getSyncErrors: localApi.getSyncErrors,
-    removeSyncErrors: localApi.removeSyncErrors,
-    keepLocal: localApi.keepLocal,
-    keepRemote: localApi.keepRemote,
-    remove: localApi.remove,
-    upsert: localApi.upsert,
-    putIfNotExists: localApi.putIfNotExists,
-    wipeDb: localApi.wipeDb,
-    delete: localApi.deleteLocalObject,
+    search: dbDriver.search,
+    query: dbDriver.query,
+    allDocs: dbDriver.allDocs,
+    bulkDocs: dbDriver.bulkDocs,
+    getById: dbDriver.getById,
+    create: dbDriver.create,
+    createAttachment: dbDriver.createAttachment,
+    update: dbDriver.update,
+    getSyncErrors: dbDriver.getSyncErrors,
+    removeSyncErrors: dbDriver.removeSyncErrors,
+    keepLocal: dbDriver.keepLocal,
+    keepRemote: dbDriver.keepRemote,
+    remove: dbDriver.remove,
+    upsert: dbDriver.upsert,
+    putIfNotExists: dbDriver.putIfNotExists,
+    wipeDb: dbDriver.wipeDb,
+    delete: dbDriver.deleteLocalObject,
     // Synchronization
     sync: remoteApi.sync,
     addSyncStep: remoteApi.addSyncStep,
