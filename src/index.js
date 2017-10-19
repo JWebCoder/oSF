@@ -5,12 +5,13 @@ import SFapi from 'sf/api'
 import Auth from 'sf/auth'
 import db from 'db'
 import dbDriver from 'DBDriver'
+import langAdapter from 'langAdapter'
 
 import type {Config, Routes, AuthAdapter} from 'types'
+import type {LangAdapter} from 'langAdapter'
 
 var sync = require('./sync')
 
-var langAdapter = require('./langAdapter')
 var pkg = require('../package.json')
 var _ = require('lodash')
 var redux = require('redux')
@@ -32,7 +33,7 @@ export function create (config: Config) {
     proxyUrl: config.proxyUrl || '',
     headers: auth.headers
   })
-  const lang = langAdapter(sfApi)
+  const lang:LangAdapter = langAdapter(sfApi)
 
   const options = {
     api: {
@@ -96,7 +97,7 @@ export function create (config: Config) {
   }
 }
 
-module.exports = {
+export default {
   version: pkg.version,
   create: create
 }

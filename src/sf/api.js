@@ -88,7 +88,7 @@ export default class SFapi {
     )
   }
 
-  query (soql: string) {
+  query (soql: string): Promise<any> {
     return this.request({
       path: this.options.routes.query,
       params: {

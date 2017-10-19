@@ -12,9 +12,9 @@ if (window.cordova) {
   PouchDB.plugin(PouchDBAdapterCordovaSqlite)
 }
 
-let db = undefined
+let db: PouchDB | void
 
-const buildDB = () => {
+const buildDB = (): PouchDB => {
   if (!db || db._destroyed) {
     db = new PouchDB('pouchfm', {
       adapter: process.env.NODE_ENV !== 'test' && adapter,
@@ -24,6 +24,5 @@ const buildDB = () => {
 
   return db
 }
-
 
 export default buildDB
