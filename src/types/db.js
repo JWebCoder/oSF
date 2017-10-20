@@ -19,6 +19,8 @@ export type DBItem = {
   _id: string,
   _rev: string,
   doc?: {},
+  config?: {},
+  lastSyncDate?: string,
   '@@FW_META@@'?: {},
   remote?: {
     Id: string,

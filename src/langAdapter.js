@@ -1,9 +1,9 @@
 /* global localStorage */
 // @flow
 
-import type SFapi from 'sf/api'
+import type {SFAPI} from 'sf/api'
 
-let api: SFapi
+let api: SFAPI
 
 function getLangFromSF (username: string): Promise<any> {
   return api.query("SELECT LanguageLocaleKey FROM User WHERE Username =  '" + username + "'")
@@ -53,7 +53,7 @@ export type LangAdapter = {
   storeCurrency: storeCurrency
 }
 
-export default function langAdapter (service: SFapi): LangAdapter {
+export default function langAdapter (service: SFAPI): LangAdapter {
   api = service
 
   return {

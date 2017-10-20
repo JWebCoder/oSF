@@ -5,7 +5,7 @@ import axios from 'axios'
 import type {Config, SFLoginParams, AxiosError, AxiosErrorResponse, User, AuthAdapter} from 'types'
 import type {$AxiosXHR} from 'axios'
 
-class Auth implements AuthAdapter {
+export default class Auth implements AuthAdapter {
   headers: Headers
   config: Config
   loginUrl: string
@@ -84,5 +84,3 @@ class Auth implements AuthAdapter {
     if (cb) cb()
   }
 }
-
-export default Auth

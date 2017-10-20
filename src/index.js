@@ -6,18 +6,14 @@ import Auth from 'sf/auth'
 import db from 'db'
 import dbDriver from 'DBDriver'
 import langAdapter from 'langAdapter'
+import sync from 'sync'
+import pkg from '../package.json'
+import store from 'state/store'
 
 import type {Config, Routes, AuthAdapter} from 'types'
 import type {LangAdapter} from 'langAdapter'
-
-var sync = require('./sync')
-
-var pkg = require('../package.json')
-var _ = require('lodash')
-var redux = require('redux')
-var actions = require('./redux/actions')
-var reducer = require('./redux/reducer')
-var store = redux.createStore(reducer)
+import type {SFAPI} from 'sf/api'
+import type {SyncParams, SyncObject} from 'sync'
 
 export function create (config: Config) {
   const routesConfig: Routes = config.routes ? config.routes : routes(config)
@@ -26,29 +22,30 @@ export function create (config: Config) {
     ? config.authAdapter(config, routesConfig.loginUrl)
     : new Auth(config, routesConfig.loginUrl)
 
-  const sfApi: SFapi = new SFapi({
+  const sfApi: SFAPI = new SFapi({
     auth: auth,
-    routes: _.extend({}, routesConfig, config.routes || {}),
+    routes: {
+      ...routesConfig,
+      ...config.routes
+    },
     baseUrl: config.baseUrl,
     proxyUrl: config.proxyUrl || '',
     headers: auth.headers
   })
   const lang:LangAdapter = langAdapter(sfApi)
 
-  const options = {
+  const options: SyncParams = {
     api: {
       sf: sfApi
     },
     localApi: dbDriver,
     remoteConfigObject: config.remoteConfigObject,
-    routes: routes,
-    auth: auth,
-    store: store,
-    actions: actions
+    routes: routesConfig,
+    auth: auth
   }
 
   // those are public objects
-  const remoteApi = sync(options)
+  const remoteApi: SyncObject = sync(options)
 
   // just exporting a public interface
   // leaving the rest as an impl-detail

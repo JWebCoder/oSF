@@ -5,7 +5,20 @@ import axios from 'axios'
 
 import type {SFConfig, RequestObject, AxiosError, AxiosResponse, User, AxiosErrorResponse} from 'types'
 
-export default class SFapi {
+type FWMeta = {'@@FW_META@@': {fieldsNotToPush: []}}
+
+export interface SFAPI {
+  request(obj: RequestObject): Promise<any>,
+  query(soql: string): Promise<any>,
+  removeforbiddenFields(data: FWMeta): {},
+  create(objectName: string, data: FWMeta): Promise<any>,
+  update(objectName: string, id: string, data: FWMeta): Promise<any>,
+  deleteRecord(objectName: string, id: string): Promise<any>,
+  get(obj: RequestObject): Promise<any>,
+  post(obj: RequestObject): Promise<any>
+}
+
+export default class SFapi implements SFAPI {
   options: SFConfig
   constructor (options: SFConfig) {
     this.options = options

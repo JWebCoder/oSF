@@ -10,7 +10,29 @@ import type {DBParams, DBQuery, DBResponse, DBItem, DBFile, DBAttachment} from '
 
 // var validationRulesFactory = require('./validationRules')
 
-class DBDriver {
+export interface DBDriverInterface {
+  search(params: DBParams): Promise<any>,
+  allDocs(params: DBQuery): Promise<any>,
+  query(doc: string, params: DBQuery): Promise<any>,
+  bulkDocs(params: {}): Promise<any>,
+  getById(id: string, opts?: {}): Promise<DBItem>,
+  create(objectType: string, initialDoc: {}): Promise<any>,
+  createAttachment(options: DBFile): Promise<any>,
+  upsert(objectid: string, docCallback: (doc: DBItem) => {}): Promise<any>,
+  putIfNotExists(arg: {} | string, doc?: DBItem): Promise<any>,
+  createOriginalPlaceHolderIfNecessary(docId: string): Promise<any>,
+  _updateInDB(newDoc: DBItem): Promise<any>,
+  update(newDoc: DBItem): Promise<any>,
+  getSyncErrors(): Promise<any>,
+  removeSyncErrors(): Promise<any>,
+  remove(doc: DBItem): Promise<any>,
+  keepRemote(conflict: DBItem): Promise<any>,
+  keepLocal(conflict: DBItem): Promise<any>,
+  deleteLocalObject(docId: string): Promise<any>,
+  wipeDb(): Promise<any>
+}
+
+class DBDriver implements DBDriverInterface {
   search (params: DBParams): Promise<any> {
     if (!params.query) {
       params.query = ''
@@ -67,7 +89,7 @@ class DBDriver {
     return db().bulkDocs(params)
   }
 
-  getById (id: string, opts?: {}): Promise<any> {
+  getById (id: string, opts?: {}): Promise<DBItem> {
     return db().get(id, opts || {})
   }
 
@@ -123,7 +145,7 @@ class DBDriver {
     }
   }
 
-  createOriginalPlaceHolderIfNecessary (docId: string): Promise<any> {
+  createOriginalPlaceHolderIfNecessary (docId: string): Promise<DBItem | void> {
     if (docId && docId.indexOf('-new-') !== -1) {
       // no need to create modified object
       return Promise.resolve()
@@ -276,7 +298,7 @@ class DBDriver {
     )
   }
 
-  deleteLocalObject (docId: string): Promise<any> {
+  deleteLocalObject (docId: string): Promise<boolean> {
     return this.getById(docId).then(
       (doc: DBItem) => {
         // in case of new objects not already pushed
@@ -315,8 +337,12 @@ class DBDriver {
     )
   }
 
-  wipeDb (): Promise<any> {
-    return db().destroy().catch(
+  wipeDb (): Promise<boolean> {
+    return db().destroy().then(
+      () => {
+        return true
+      }
+    ).catch(
       (err: {}) => {
         logger.error('error while destroyng database', err)
         return true
