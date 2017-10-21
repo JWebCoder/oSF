@@ -8,15 +8,28 @@ export type DBParams = {
 }
 
 export type DBQuery = {
-  include_docs: boolean,
+  include_docs?: boolean,
   attachments?: boolean,
   limit?: number,
   startkey: string,
   endkey: string
 }
 
+export type Original = {
+  Id: string,
+  type: string,
+  [string]: {}
+}
+
+export type Override = {
+  Id: string,
+  type: string,
+  '@@FW_META@@'?: {}
+}
+
 export type DBItem = {
   _id: string,
+  id: string,
   _rev: string,
   doc?: {},
   config?: {},
@@ -26,10 +39,7 @@ export type DBItem = {
     Id: string,
     type: string
   },
-  original?: {
-    Id: string,
-    type: string
-  }
+  original?: Original
 }
 
 export type DBResponse = {

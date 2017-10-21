@@ -15,7 +15,7 @@ export type SyncStatus = {
 export type InitialState = {
   errors: [],
   status: SyncStatus,
-  payload: {}
+  payload: []
 }
 
 export const initialStatus: SyncStatus = {
@@ -25,12 +25,12 @@ export const initialStatus: SyncStatus = {
   currentStep: 0
 }
 
-export const initialState = {
+const initialState = {
   errors: [],
   status: {
     ...initialStatus
   },
-  payload: {}
+  payload: []
 }
 
 export default function reducer (state: InitialState = initialState, action: Action) {

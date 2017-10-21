@@ -132,7 +132,7 @@ function sync (opts = {}): void {
     R.pipeP(startSync, incrementProgress),
     R.pipeP(setupSteps, incrementProgress),
     R.pipeP(dropDatebaseIfNecessary, incrementProgress),
-    R.pipeP(getSyncConfig, incrementProgress),
+    R.pipeP(getSyncConfig.getSyncConfig(), incrementProgress),
     processItems(incrementProgress),
     R.composeP(incrementProgress, sendAttachments),
     R.composeP(incrementProgress, processValidationRules),

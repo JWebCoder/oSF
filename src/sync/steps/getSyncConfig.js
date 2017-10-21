@@ -3,7 +3,7 @@
 import logger from 'logger'
 import actions from 'state/actions'
 import store from 'state/store'
-import db from 'DBDriver'
+import dbDriver from 'DBDriver'
 
 import {buildSelectObjectQuery} from 'sf/utils'
 
@@ -17,6 +17,15 @@ export type SFObject = {
   hasLayouts__c: string,
   Query__c: string,
   NewRecordTypeId__c: string
+}
+
+export type StepObject = {
+  name: string,
+  indexName: string,
+  indexMapFunction: string,
+  hasLayouts: string,
+  soql: string,
+  newRecordTypeId: string
 }
 
 export default class getSyncConfig {
@@ -53,22 +62,24 @@ export default class getSyncConfig {
       }
     ).then(
       (res: {records: []}) => {
-        return res.records.map(function (el: SFObject) {
-          // normalize data
-          return {
-            name: el.Name,
-            indexName: el.IndexName__c,
-            indexMapFunction: el.IndexMapFunction__c,
-            hasLayouts: el.hasLayouts__c,
-            soql: el.Query__c,
-            newRecordTypeId: el.NewRecordTypeId__c
+        return res.records.map(
+          (el: SFObject): StepObject => {
+            // normalize data
+            return {
+              name: el.Name,
+              indexName: el.IndexName__c,
+              indexMapFunction: el.IndexMapFunction__c,
+              hasLayouts: el.hasLayouts__c,
+              soql: el.Query__c,
+              newRecordTypeId: el.NewRecordTypeId__c
+            }
           }
-        })
+        )
       }
     ).then(
       (syncConfig) => {
         // Store the syncConfig object and return it
-        db.upsert(
+        dbDriver.upsert(
           'sync-config',
           (doc: {}) => {
             return {

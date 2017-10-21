@@ -8,13 +8,14 @@ import store from 'state/store'
 import actions from 'state/actions'
 import dbDriver from 'DBDriver'
 import moment from 'moment'
+import utils from './utils'
 
 // types
 import type {InitialState} from 'state/reducer'
 import type {SFAPI} from 'sf/api'
 import type {Routes, AuthAdapter} from 'types'
 import type {DBResponse, DBItem} from 'types/db'
-import type {StepObject} from './getSyncConfig'
+import type {StepObject} from 'sync/steps/getSyncConfig'
 
 var us = require('underscore.string')
 
@@ -42,69 +43,32 @@ export default class ProcessItems {
     getSyncMetadataObject().then(
       (metadataObject: DBItem): (() => Promise<boolean>)[] => {
         return state.payload.map(
-          (obj) => this.buildStepFunction(obj, metadataObject)
+          (obj: StepObject) => utils.buildStepFunction(
+            obj,
+            metadataObject,
+            this.processLocallyDeletedDocuments,
+            this.storeData
+          )
         )
       }
     ).then(
       (stepFunctions: (() => Promise<boolean>)[]): Promise<any> => {
         // process in sequence
         return stepFunctions.reduce(
-          (acc, val: () => Promise<boolean>) => {
-            return acc.then(
-              () => {
-                incrementProgress()
-                return val()
-              }
-            ).catch(
-              () => {
-                incrementProgress()
-                return val()
-              }
-            )
-          },
+          utils.stepReducer(incrementProgress),
           Promise.resolve(true)
         )
       }
     ).then(
-      (sequence: Promise<any>) => {
-        sequence
-          .then(function () {
-            logger.groupEnd('processItems')
-          })
-          .catch(function () {
-            logger.groupEnd('processItems')
-            logger.info('error-state: ', store.getState())
-          })
+      () => {
+        logger.groupEnd('processItems')
+      }
+    ).catch(
+      () => {
+        logger.groupEnd('processItems')
+        logger.info('error-state: ', store.getState())
       }
     )
-  }
-
-  buildStepFunction (obj: StepObject, metadataObject: DBItem): () => Promise<boolean> {
-    return () => {
-      logger.group(obj.name)
-      store.dispatch(actions.updateSyncStatus({
-        status: {
-          currentStep: 'Getting SalesForce ' + obj.name
-        }
-      }))
-
-      return this.processLocallyDeletedDocuments(obj).then(
-        () => {
-          return this.storeData(obj, metadataObject.lastSyncDate)
-        }
-      ).then(
-        () => {
-          logger.groupEnd(obj.name)
-          return true
-        }
-      ).catch(
-        (err: {}) => {
-          logger.error('processItems', err)
-          logger.groupEnd(obj.name)
-          return true
-        }
-      )
-    }
   }
 
   getRequestForDeletedObjects (objectName: string): {path: string} {
@@ -117,27 +81,6 @@ export default class ProcessItems {
     }
   }
 
-  deleteRecords (docs: DBItem[]): Promise<any>[] {
-    return docs.map(
-      (doc) => {
-        const splittedId: string[] = doc.id.split('-')
-        return this.deleteRecord(splittedId[0], splittedId[1], doc)
-      }
-    )
-  }
-
-  deleteRecord (objectName: string, id: string, doc: DBItem): Promise<any> {
-    return this.api.deleteRecord(objectName, id).then(
-      () => {
-        return dbDriver.getById(doc.id)
-      }
-    ).then(
-      (fullDoc) => {
-        return dbDriver.remove(fullDoc)
-      }
-    )
-  }
-
   processLocallyDeletedDocuments (obj: StepObject): Promise<any> {
     logger.log('processLocallyDeletedDocuments')
     return dbDriver.allDocs({
@@ -146,7 +89,7 @@ export default class ProcessItems {
     }).then(
       (docs: DBResponse) => {
         return Promise.all(
-          this.deleteRecords(docs.rows)
+          utils.deleteRecords(docs.rows, this.api)
         )
       }
     ).catch(
@@ -158,7 +101,114 @@ export default class ProcessItems {
     )
   }
 
-  recursivelyLoadRecordsFromSalesforce (arg) {
+  storeData (object: StepObject, lastSyncDate: string) {
+    logger.info('storeData()')
+    return dbDriver
+      .allDocs({
+        startkey: object.name + '-new-',
+        endkey: object.name + '-new-\uffff',
+        include_docs: true
+      }).then(
+        (res: DBResponse): Promise<any> => {
+          return {
+            data: res.rows,
+            sfObject: object
+          }
+        }
+      ).then(
+        (res: Promise<{data: DBItem[], sfObject: StepObject}>): Promise<any> => {
+          return pushNewDocuments(res)
+        }
+      ).then(
+        () => {
+          return this.api.get({
+            path: this.routes.genericObjects + object.name + '/describe/'
+          })
+        }
+      ).then(
+        (res: {fields: []}) => {
+          return getLayouts(object).then(
+            (layouts) => {
+              return {
+                fields: getFieldsUsedInLayouts(layouts, res.fields),
+                layouts: layouts
+              }
+            }
+          )
+        }
+      )
+      .then(function (res) {
+        return api.query(buildSelectObjectQuery(res.fields, object, lastSyncDate, auth.getUser()))
+          .then(function (respones) {
+            return {
+              sfObject: object,
+              sfResult: respones,
+              layouts: res.layouts
+
+            }
+          })
+          .then(recursivelyLoadRecordsFromSalesforce)
+          .then(function (res) {
+            return api.get(getRequestForDeletedObjects(object.name, lastSyncDate))
+          })
+          .catch(function (err) {
+            logger.error('Error while fetching remotely deleted docs: ', err)
+            return {}
+          })
+          .then(function (res) {
+            return {
+              sfObject: object,
+              sfResult: res
+            }
+          })
+          .then(processDeletedRecords)
+          .then(function (res) {
+            // Load docs locally modified, and not conflicting
+            return dbDriver.allDocs({
+              startkey: 'original-' + object.name + '-',
+              endkey: 'original-' + object.name + '-\uffff',
+              include_docs: true
+            })
+              .then(function (originals) {
+                return dbDriver.allDocs({
+                  startkey: 'conflict-' + object.name + '-',
+                  endkey: 'conflict-' + object.name + '-\uffff',
+                  include_docs: true
+                })
+                  .then(function (conflicting) {
+                    // push only documents that are not marked as conflicting
+                    return originals.rows.filter(function (el) {
+                      return !_.find(conflicting.rows, {
+                        id: el.id.replace('original', 'conflict')
+                      })
+                    })
+                  })
+              })
+          })
+          .then(function (docsToPush) {
+            // Prepare args for next step
+            return {
+              sfObject: object,
+              data: docsToPush
+            }
+          })
+          .then(function (res) {
+            return pushChanges(res)
+          })
+          .then(function () {
+            return true
+          })
+          .catch(function (err) {
+            logger.error('storeData', err)
+            return true
+          })
+      })
+  }
+}
+
+function processItems (api, routes, auth) {
+
+  function recursivelyLoadRecordsFromSalesforce (arg) {
     logger.info('recursivelyLoadRecordsFromSalesforce')
     var remoteDocs = arg.sfResult.records.map(function (record) {
       return _.extend({}, {
@@ -258,9 +308,6 @@ export default class ProcessItems {
         .then(recursivelyLoadRecordsFromSalesforce)
     }
   }
-}
-
-function processItems (api, routes, auth) {
 
   function pushNewDocuments (arg) {
     logger.info('pushing new documents :pushNewDocuments()')
@@ -434,105 +481,5 @@ function processItems (api, routes, auth) {
       }
     })
     return finalRecord
-  }
-
-  function storeData (object, lastSyncDate) {
-    logger.info('storeData()')
-    return dbDriver
-      .allDocs({
-        startkey: object.name + '-new-',
-        endkey: object.name + '-new-\uffff',
-        include_docs: true
-      })
-      .then(function (res) {
-        return {
-          data: res.rows,
-          sfObject: object
-        }
-      })
-      .then(function (res) {
-        return pushNewDocuments(res)
-      })
-      .then(function (res) {
-        return api
-          .get({
-            path: routes.genericObjects + object.name + '/describe/'
-          })
-      })
-      .then(function (res) {
-        return getLayouts(object)
-          .then(function (layouts) {
-            return {
-              fields: getFieldsUsedInLayouts(layouts, res.fields),
-              layouts: layouts
-            }
-          })
-      })
-      .then(function (res) {
-        return api.query(buildSelectObjectQuery(res.fields, object, lastSyncDate, auth.getUser()))
-          .then(function (respones) {
-            return {
-              sfObject: object,
-              sfResult: respones,
-              layouts: res.layouts
-
-            }
-          })
-          .then(recursivelyLoadRecordsFromSalesforce)
-          .then(function (res) {
-            return api.get(getRequestForDeletedObjects(object.name, lastSyncDate))
-          })
-          .catch(function (err) {
-            logger.error('Error while fetching remotely deleted docs: ', err)
-            return {}
-          })
-          .then(function (res) {
-            return {
-              sfObject: object,
-              sfResult: res
-            }
-          })
-          .then(processDeletedRecords)
-          .then(function (res) {
-            // Load docs locally modified, and not conflicting
-            return dbDriver.allDocs({
-              startkey: 'original-' + object.name + '-',
-              endkey: 'original-' + object.name + '-\uffff',
-              include_docs: true
-            })
-              .then(function (originals) {
-                return dbDriver.allDocs({
-                  startkey: 'conflict-' + object.name + '-',
-                  endkey: 'conflict-' + object.name + '-\uffff',
-                  include_docs: true
-                })
-                  .then(function (conflicting) {
-                    // push only documents that are not marked as conflicting
-                    return originals.rows.filter(function (el) {
-                      return !_.find(conflicting.rows, {
-                        id: el.id.replace('original', 'conflict')
-                      })
-                    })
-                  })
-              })
-          })
-          .then(function (docsToPush) {
-            // Prepare args for next step
-            return {
-              sfObject: object,
-              data: docsToPush
-            }
-          })
-          .then(function (res) {
-            return pushChanges(res)
-          })
-          .then(function () {
-            return true
-          })
-          .catch(function (err) {
-            logger.error('storeData', err)
-            return true
-          })
-      })
   }
 }
